@@ -1,0 +1,48 @@
+--- a/physfs_platforms.h
++++ b/physfs_platforms.h
+@@ -12,7 +12,11 @@
+  *  PHYSFS_PLATFORM_UNIX on that system.
+  */
+ 
+-#if (defined __HAIKU__)
++/* AmiCradle: AmigaOS 3.x, on dos.library (physfs_platform_amiga.c). */
++#if defined(__amigaos__)
++#  define PHYSFS_PLATFORM_AMIGA 1
++#  define PHYSFS_NO_CDROM_SUPPORT 1
++#elif (defined __HAIKU__)
+ #  define PHYSFS_PLATFORM_HAIKU 1
+ #  define PHYSFS_PLATFORM_POSIX 1
+ #elif ((defined __BEOS__) || (defined __beos__))
+--- a/physfs.h
++++ b/physfs.h
+@@ -225,7 +225,7 @@
+ 
+ #if defined(PHYSFS_DECL)
+ /* do nothing. */
+-#elif defined(PHYSFS_STATIC)
++#elif defined(PHYSFS_STATIC) || defined(__amigaos__) /* AmiCradle: a static library */
+ #define PHYSFS_DECL   /**/
+ #elif defined(_WIN32) || defined(__OS2__)
+ #define PHYSFS_DECL __declspec(dllexport)
+--- a/physfs_internal.h
++++ b/physfs_internal.h
+@@ -69,7 +69,7 @@
+    All file-private symbols need to be marked "static".
+    Everything shared between PhysicsFS sources needs to be in this
+    file between the visibility pragma blocks. */
+-#if !defined(_WIN32) && (PHYSFS_MINIMUM_GCC_VERSION(4,0) || defined(__clang__))
++#if !defined(_WIN32) && !defined(__amigaos__) && (PHYSFS_MINIMUM_GCC_VERSION(4,0) || defined(__clang__)) /* AmiCradle: no visibility on Amiga hunks */
+ #define PHYSFS_HAVE_PRAGMA_VISIBILITY 1
+ #endif
+ 
+@@ -115,6 +115,10 @@
+ __PHYSFS_COMPILE_TIME_ASSERT(LongEqualsInt, sizeof (int) == sizeof (long));
+ #define __PHYSFS_ATOMIC_INCR(ptrval) _InterlockedIncrement((long*)(ptrval))
+ #define __PHYSFS_ATOMIC_DECR(ptrval) _InterlockedDecrement((long*)(ptrval))
++#elif defined(__amigaos__)
++/* AmiCradle: one task, and libgcc has no __sync_* for the 68k. */
++#define __PHYSFS_ATOMIC_INCR(ptrval) (++*(ptrval))
++#define __PHYSFS_ATOMIC_DECR(ptrval) (--*(ptrval))
+ #elif defined(__clang__) || (defined(__GNUC__) && (((__GNUC__ * 10000) + (__GNUC_MINOR__ * 100)) >= 40100))
+ #define __PHYSFS_ATOMIC_INCR(ptrval) __sync_add_and_fetch(ptrval, 1)
+ #define __PHYSFS_ATOMIC_DECR(ptrval) __sync_add_and_fetch(ptrval, -1)

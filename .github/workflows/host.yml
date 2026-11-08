@@ -1,0 +1,12 @@
+name: host
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh tests/host/run.sh

@@ -29,4 +29,9 @@ t=$(grep -c '^PHYSFS_' "$HERE/library/functions.txt")
 [ "$n" = "$t" ] || { echo "gen.py: $n calls in the .fd, $t in functions.txt"; exit 1; }
 v=$(grep -c '^PHYSFS_VECTOR(' "$B/gen/physfs_vectors.h")
 [ "$v" = "$t" ] || { echo "gen.py: $v vectors, $t in functions.txt"; exit 1; }
-echo "host: PASS (PhysFSTest with miniz and with zlib, and gen.py made $n calls)"
+# sdk/: the SDK's copies of gen.py's headers and .fd, kept in the repository
+# so that the Open SDK's tools/gather.py can take them at a pinned commit.
+for f in include/inline/physfs.h include/proto/physfs.h include/physfs.h fd/physfs_lib.fd; do
+    cmp -s "$B/gen/$f" "$HERE/sdk/$f" || { echo "sdk/$f is not what gen.py makes: run tools/update-sdk.sh"; exit 1; }
+done
+echo "host: PASS (PhysFSTest with miniz and with zlib, gen.py made $n calls, sdk/ matches it)"

@@ -24,10 +24,12 @@ repository makes one copy, `LIBS:physfs.library`:
 | | |
 |---|---|
 | PhysicsFS | 3.2.0 as released (`physfs/`), with the Team's AmigaOS platform (`amiga/`) and two patches (`patches/`: the header, and zip's inflate from z.library) |
-| physfs.library | 1.1: builds with OpenAmigaGCC 16.2.0; runs in a Cradle lab on the Team's OpenROM (exec 47.13): PhysFSTest 38 of 38, alone and four at once; 20 opens and closes leave no memory behind; `Avail FLUSH` expunges it |
-| Stock Kickstart 3.2.3 | Built from main at 21cfa03 (114,484 B, sha256 c998d88e…), in a lab copy of a stock 3.2.3 A1200 (Kickstart 47.115, exec 47.13, dos 47.30, no GFOpenUp) with z.library 53.14: PhysFSTest 39 of 39, zip inflate through z.library included; two and four at once all pass; 20 runs in a row pass; `Avail FAST` the same before and after `Avail FLUSH` (0 B lost); after the flush, with the file renamed away, PhysFSTest gets rc 20 (the library had left memory). Without z.library: 37 of 39, only the two deflated-member checks fail ("corrupted"), as designed |
+| physfs.library | 1.1 (main 21cfa03, 114,484 B): builds with OpenAmigaGCC 16.2.0. PhysFSTest 39 of 39, zip inflate through z.library 53.14 included, alone, two and four at once; 20 opens and closes leave no memory behind; `Avail FLUSH` expunges it. Run on the Team's OpenROM (exec 47.13, Instance-40 lab) and on stock Kickstart 3.2.3 (Instance-23 lab) |
+| Stock 3.2.3 without z.library | 37 of 39: only the two deflated zip member checks fail ("corrupted"), everything else passes. Stock 3.2.3 has no z.library, so a port whose data is deflated zip ships z.library beside physfs.library or needs GFOpenUp |
 | Host check | `tests/host/run.sh`: PhysFSTest on Linux, 39 of 39 with PhysicsFS's miniz and 39 of 39 with the zip reader as the library builds it, on zlib |
-| Next | Shipped in GFOpenUp and the GFOpenGPU SDK, then Hedgewars 1.0.3 on it |
+| SDK files | `sdk/include` (`physfs.h`, `proto/physfs.h`, `inline/physfs.h`) and `sdk/fd/physfs_lib.fd`: gen.py's output, kept here so the Open SDK can take it at a pinned commit (`tools/update-sdk.sh` writes them; the host check and `build-amiga.sh` stop when they are out of date). `docs/physfs.library.md` is the SDK's page |
+| First port | Block Attack 2.9.1 (DalsinAI/amigablockattack) links `-lphysfs_auto` instead of its own copy |
+| Next | Shipped in GFOpenUp, the GFOpenGPU kit and the Open SDK; then DXX-Rebirth and Hedgewars 1.0.3 on it |
 
 ## Using it in a port
 

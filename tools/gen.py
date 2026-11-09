@@ -227,7 +227,10 @@ def main():
         "struct Library;\nextern struct Library *PhysFSBase;\n\n" + "\n".join(inlines) + "\n#endif\n")
     (out / "include/proto/physfs.h").write_text(
         "#ifndef _PROTO_PHYSFS_H\n#define _PROTO_PHYSFS_H\n#include <exec/types.h>\n"
-        "extern struct Library *PhysFSBase;\n#define PHYSFSNAME \"physfs.library\"\n"
+        "/* C linkage, as <inline/physfs.h> (inside <physfs.h>'s extern \"C\") declares it */\n"
+        "#ifdef __cplusplus\nextern \"C\" {\n#endif\n"
+        "extern struct Library *PhysFSBase;\n"
+        "#ifdef __cplusplus\n}\n#endif\n#define PHYSFSNAME \"physfs.library\"\n"
         "#include <physfs.h>\n#endif\n")
     (out / "include/physfs.h").write_text(sdk_header())
     (out / "fd/physfs_lib.fd").write_text("\n".join(fd) + "\n")

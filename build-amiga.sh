@@ -58,6 +58,10 @@ for f in include/inline/physfs.h include/proto/physfs.h include/physfs.h fd/phys
 done
 cp -R "$W/gen/include" "$OUT/sdk/include"
 cp -R "$W/gen/fd" "$OUT/sdk/fd"
+# The SDK's headers from C++ too (ports such as Block Attack are C++), through
+# <proto/physfs.h> and <physfs.h>.
+printf '#include <proto/physfs.h>\n#include <physfs.h>\nint main(void){return PHYSFS_isInit();}\n' > "$W/cxx.cpp"
+"$BIN/m68k-amigaos-g++" -noixemul $CPU $NDKFLAG -std=gnu++17 -Wall -Wextra -Werror -fsyntax-only -I"$OUT/sdk/include" "$W/cxx.cpp"
 
 COMMON="-noixemul $CPU $NDKFLAG -O2 -fomit-frame-pointer -fno-tree-loop-distribute-patterns -fno-common -std=gnu99 -DNDEBUG -D__amigaos__ -DPHYSFS_ZLIBRARY -Wall -Wno-unused"
 

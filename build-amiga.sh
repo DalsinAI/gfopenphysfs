@@ -46,6 +46,8 @@ for f in "$HERE"/physfs/*.c "$HERE"/physfs/*.h; do
     case "$f" in *physfs_platform_posix.c|*physfs_platform_unix.c) ;; *) cp "$f" "$W/src/" ;; esac
 done
 cp "$HERE/amiga/physfs_platform_amiga.c" "$W/src/"
+# zip members inflate through z.library, not PhysicsFS's miniz (patch 0002)
+cp "$HERE/amiga/physfs_zlibrary.c" "$HERE/amiga/physfs_zlibrary.h" "$W/src/"
 for p in "$HERE"/patches/*.patch; do patch -s -d "$W/src" -p1 < "$p"; done
 cp "$W/src/physfs.h" "$OUT/sdk/include-static/physfs.h"
 SRC=$(ls "$W"/src/*.c)
@@ -54,7 +56,7 @@ python3 -I "$HERE/tools/gen.py" "$W/gen"
 cp -R "$W/gen/include" "$OUT/sdk/include"
 cp -R "$W/gen/fd" "$OUT/sdk/fd"
 
-COMMON="-noixemul $CPU $NDKFLAG -O2 -fomit-frame-pointer -fno-tree-loop-distribute-patterns -fno-common -std=gnu99 -DNDEBUG -D__amigaos__ -Wall -Wno-unused"
+COMMON="-noixemul $CPU $NDKFLAG -O2 -fomit-frame-pointer -fno-tree-loop-distribute-patterns -fno-common -std=gnu99 -DNDEBUG -D__amigaos__ -DPHYSFS_ZLIBRARY -Wall -Wno-unused"
 
 # physfs.library: PhysicsFS and the call entries a4-relative, so that
 # physfs_libinit.c (the RomTag and the library's own Open/Close/Expunge,
@@ -62,7 +64,7 @@ COMMON="-noixemul $CPU $NDKFLAG -O2 -fomit-frame-pointer -fno-tree-loop-distribu
 # data. -resident has ld add the table of the data's pointers into itself
 # (__datadata_relocs), which each copy is relocated by.
 for f in $SRC "$HERE/library/physfs_lib.c" "$W/gen/physfs_stubs.c"; do
-    "$CC" $COMMON -fbaserel -I"$W/src" -I"$HERE/library" -c -o "$W/lib/$(basename "$f" .c).o" "$f"
+    "$CC" $COMMON -fbaserel -DPHYSFS_ZLIBRARY_IN_LIBRARY -I"$W/src" -I"$HERE/library" -c -o "$W/lib/$(basename "$f" .c).o" "$f"
 done
 "$CC" $COMMON -fno-toplevel-reorder -I"$W/gen" -I"$HERE/library" -c -o "$W/physfs_libinit.o" "$HERE/library/physfs_libinit.c"
 # strip refuses the a4-relative data section, so the link strips (-s).

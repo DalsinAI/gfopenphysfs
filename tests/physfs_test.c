@@ -118,7 +118,16 @@ int main(int argc, char **argv)
           && memcmp(buf, "stored member\n", 14) == 0, "zip: a stored member");
     memset(buf, 0, sizeof buf);
     check(read_all("zip/data/deflated.txt", buf, sizeof buf, &got) && got == 1025
-          && memcmp(buf + 1008, "deflated member \n", 17) == 0, "zip: a deflated member (miniz)");
+          && memcmp(buf + 1008, "deflated member \n", 17) == 0, "zip: a deflated member (inflate)");
+    {   /* back to an earlier place in a deflated member: inflate starts again */
+        PHYSFS_File *f = PHYSFS_openRead("zip/data/deflated.txt");
+        char a[17], b[17];
+        int ok = f && PHYSFS_seek(f, 1008) && PHYSFS_readBytes(f, a, 17) == 17
+                 && PHYSFS_seek(f, 0) && PHYSFS_seek(f, 1008) && PHYSFS_readBytes(f, b, 17) == 17
+                 && memcmp(a, b, 17) == 0 && memcmp(a, "deflated member \n", 17) == 0;
+        if (f) PHYSFS_close(f);
+        check(ok, "zip: seek back in a deflated member");
+    }
     check(strcmp(PHYSFS_getMountPoint("test.zip"), "zip/") == 0, "getMountPoint");
     check(PHYSFS_unmount("test.zip") != 0, "unmount");
 

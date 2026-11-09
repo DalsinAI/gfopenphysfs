@@ -21,10 +21,12 @@ patch -s -d "$B/z/src" -p1 < "$HERE/patches/0002-zip-inflate-from-zlibrary.patch
     -o "$B/PhysFSTestZlib" $(ls "$B"/z/src/*.c) "$HERE/tests/physfs_test.c" -lz -lpthread
 "$B/PhysFSTestZlib" "$B/z/w" host
 python3 -I "$HERE/tools/gen.py" "$B/gen" >/dev/null
-for f in physfs_stubs.c include/inline/physfs.h include/proto/physfs.h include/physfs.h fd/physfs_lib.fd; do
+for f in physfs_stubs.c physfs_vectors.h include/inline/physfs.h include/proto/physfs.h include/physfs.h fd/physfs_lib.fd; do
     test -s "$B/gen/$f" || { echo "gen.py: $f missing"; exit 1; }
 done
 n=$(grep -c '^PHYSFS_' "$B/gen/fd/physfs_lib.fd")
 t=$(grep -c '^PHYSFS_' "$HERE/library/functions.txt")
 [ "$n" = "$t" ] || { echo "gen.py: $n calls in the .fd, $t in functions.txt"; exit 1; }
+v=$(grep -c '^PHYSFS_VECTOR(' "$B/gen/physfs_vectors.h")
+[ "$v" = "$t" ] || { echo "gen.py: $v vectors, $t in functions.txt"; exit 1; }
 echo "host: PASS (PhysFSTest with miniz and with zlib, and gen.py made $n calls)"

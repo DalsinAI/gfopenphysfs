@@ -72,6 +72,29 @@ Nothing is ever reordered or removed.
 - `PHYSFS_getBaseDir()`, `PHYSFS_getUserDir()` and `PHYSFS_getPrefDir()` are the program's own drawer (`PROGDIR:`), so settings and saves stay with the game, as Amiga users expect. A later version may offer `ENVARC:` for settings.
 - Names are AmigaDOS names with "/" as the separator. The platform drops a trailing "/" and one right after a ":".
 
+## Inflate from z.library (9 November 2026)
+
+PhysicsFS carries its own inflate (`physfs_miniz.h`) and the LZMA SDK
+(`physfs_lzmasdk.h`). On the Amiga we already have a shared inflate,
+z.library, which GFOpenCompress and GFOffice use; and on AmiCradle that is
+the inflate to run as host code (the host-run libraries plan). So
+physfs.library takes zip's inflate from z.library (Dale, 9 Nov: "we have
+opencompress, so what's physfs adding by having its own code").
+
+- `patches/0002-zip-inflate-from-zlibrary.patch` includes
+  `amiga/physfs_zlibrary.h` in place of miniz when `PHYSFS_ZLIBRARY` is
+  defined, and starts a stream again with `inflateReset` when a program
+  seeks back in a deflated member. PhysicsFS copied a fresh z_stream over
+  the old one there; zlib's state points back at its z_stream (zlib 1.2.9
+  on), so the copy would be refused.
+- `amiga/physfs_zlibrary.c` calls z.library's jump table as GFOpenCompress
+  does (InflateInit2 -102, Inflate -60, InflateEnd -66, InflateReset -114;
+  GFOpenZlib 53.12 refused). z.library allocates for itself: PhysicsFS's
+  zalloc and zfree are cleared.
+- Each opener opens z.library for itself, the first time a deflated member
+  is read; `__UserLibCleanup` closes it. `libphysfs.a` closes it at exit.
+- 7z stays on PhysicsFS's LZMA SDK until there is one shared LZMA decoder.
+
 ## Still to do
 
 1. **PhysFSTest in a Cradle lab:** one copy, then two at once with different names (the per-program state), then 50 opens and closes (no memory left behind).

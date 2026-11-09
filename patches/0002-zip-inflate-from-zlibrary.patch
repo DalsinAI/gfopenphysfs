@@ -1,0 +1,38 @@
+--- a/physfs_archiver_zip.c
++++ b/physfs_archiver_zip.c
+@@ -20,7 +20,11 @@
+ #else
+ #define MINIZ_LITTLE_ENDIAN 0
+ #endif
++#if defined(PHYSFS_ZLIBRARY) || defined(PHYSFS_ZLIBRARY_HOSTED)
++#include "physfs_zlibrary.h"  /* AmigaOS: inflate from z.library, not miniz */
++#else
+ #include "physfs_miniz.h"
++#endif
+ 
+ /*
+  * A buffer of ZIP_READBUFSIZE is allocated for each compressed file opened,
+@@ -403,6 +407,15 @@
+          */
+         if (offset < finfo->uncompressed_position)
+         {
++#if defined(PHYSFS_ZLIBRARY) || defined(PHYSFS_ZLIBRARY_HOSTED)
++            /* zlib's state points back at its z_stream, so a copied stream
++             *  is refused (zlib 1.2.9 on): start this one again instead. */
++            if (!io->seek(io, entry->offset + (encrypted ? 12 : 0)))
++                return 0;
++
++            if (zlib_err(inflateReset(&finfo->stream)) != Z_OK)
++                return 0;
++#else
+             /* we do a copy so state is sane if inflateInit2() fails. */
+             z_stream str;
+             initializeZStream(&str);
+@@ -414,6 +427,7 @@
+ 
+             inflateEnd(&finfo->stream);
+             memcpy(&finfo->stream, &str, sizeof (z_stream));
++#endif
+             finfo->uncompressed_position = finfo->compressed_position = 0;
+ 
+             if (encrypted)

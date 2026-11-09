@@ -25,6 +25,7 @@
 #include <stddef.h>
 
 #include "physfs.h"
+#include "physfs_zlibrary.h"
 
 #define PHYSFS_LIB_VERSION  1
 #define PHYSFS_LIB_REVISION 0
@@ -144,6 +145,7 @@ VOID __stdargs __UserLibCleanup(REG(a4, APTR a4))
     (void) a4;
     if (PHYSFS_isInit())
         PHYSFS_deinit();  /* a program that forgot: its files are closed */
+    physfs_zlibrary_close();   /* z.library, when a zip member opened it */
     if (pool)
         DeletePool(pool);
     pool = NULL;

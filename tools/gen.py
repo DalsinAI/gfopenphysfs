@@ -9,8 +9,10 @@ call table, in LVO order, which is the library's ABI) and writes:
   OUTDIR/physfs_stubs.c          library side: one entry per call, in table
                                  order. Each entry saves a4, pushes the call's
                                  registers as C arguments, loads this opener's
-                                 data pointer (base + 40, libnix libinitr) into
-                                 a4 and calls PhysicsFS's own function.
+                                 data pointer (base + 40, physfs_libinit.c)
+                                 into a4 and calls PhysicsFS's own function.
+  OUTDIR/physfs_vectors.h        the call table (one PHYSFS_VECTOR line per
+                                 call, LVO order), for physfs_libinit.c.
   OUTDIR/include/inline/physfs.h caller side: a static inline function per call
                                  that loads the registers and jumps through
                                  PhysFSBase.
@@ -137,7 +139,6 @@ def stub(call, regs):
         lines.append('asm("\\taddaw #%d,sp");' % (4 * len(flat)))
     lines.append('asm("\\tmovel sp@+,a4");')
     lines.append('asm("\\trts");')
-    lines.append("ADD2LIST(LIBSTUB_%s,__FuncTable__,22);" % call["name"])
     return "\n".join(lines)
 
 
@@ -214,8 +215,12 @@ def main():
         fd.append(fd_line(call, regs))
     fd.append("##end")
     (out / "physfs_stubs.c").write_text(
-        "/* physfs.library's call table, made by tools/gen.py from library/functions.txt. */\n"
-        "#include <stabs.h>\n\n" + "\n\n".join(stubs) + "\n\nADDTABL_END();\n")
+        "/* physfs.library's call entries, made by tools/gen.py from library/functions.txt. */\n\n"
+        + "\n\n".join(stubs) + "\n")
+    (out / "physfs_vectors.h").write_text(
+        "/* physfs.library's call table in LVO order from -30, made by tools/gen.py from\n"
+        " * library/functions.txt. physfs_libinit.c defines PHYSFS_VECTOR. */\n"
+        + "".join("PHYSFS_VECTOR(LIBSTUB_%s)\n" % name for name in table))
     (out / "include/inline/physfs.h").write_text(
         "/* physfs.library calls, made by gfopenphysfs tools/gen.py. Included by <physfs.h>. */\n"
         "#ifndef _INLINE_PHYSFS_H\n#define _INLINE_PHYSFS_H\n#include <exec/types.h>\n"

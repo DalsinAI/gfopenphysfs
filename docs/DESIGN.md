@@ -17,12 +17,20 @@ search path, the write drawer, open files, per-thread errors. A library with
 one data segment would share all of that between programs: one program's
 `PHYSFS_deinit()` would end another's game.
 
-So the library is built with libnix's `libinitr.o` and every object is
-compiled `-fbaserel` (data addressed through `a4`). We checked this against
-the disassembly of OpenAmigaGCC 16.2.0-open4's `libinitr.o`:
-- **`LibOpen`** makes a new library base for each `OpenLibrary()` (`MakeLibrary` with room for the data and bss), copies the data into it and relocates it. The base's offset 40 points at that copy.
-- **`__UserLibInit`** then runs with `a4` on the copy; 0 means success.
-- **`LibClose`** runs `__UserLibCleanup` and frees that base.
+So PhysicsFS and the call entries are compiled `-fbaserel` (data addressed
+through `a4`), and `library/physfs_libinit.c`, linked first, starts the
+library:
+- **The RomTag** (RTF_AUTOINIT, NT_LIBRARY) is what ramlib looks for after it `LoadSeg()`s the file. Its init makes the parent base, the one in exec's library list. The parent's data hunk is never written: it is the pattern for the copies.
+- **The parent's Open** makes a new base for each `OpenLibrary()` (`MakeLibrary` with the call table and room for the data and bss), copies the data hunk's initialised part behind it and relocates its pointers into itself (the table ld makes with `-amiga-datadata-reloc`, which the link's `-resident` turns on). The base's offset 40 points at that copy (`a4`).
+- **`__UserLibInit`** then runs with `a4` on the copy; 0 means success. The program gets the new base.
+- **The opener's Close** runs `__UserLibCleanup` with `a4` on its copy and frees that base. The parent expunges once nothing is open (`Avail FLUSH`), or at the last close if an expunge was asked for meanwhile.
+
+Version 1.0 used libnix's `libinitr.o` for this. That object has no RomTag,
+so ramlib could not start the library (`OpenLibrary()` gave NULL), and in
+OpenAmigaGCC 16.2.0-open4's link its Open passes `MakeLibrary` a table that
+starts at the first PhysicsFS entry instead of Open/Close/Expunge/ExtFunc.
+`tools/checklib.py` now checks every build for the RomTag, the parent's
+vectors and the data relocation table.
 
 Our `__UserLibInit` opens dos.library 39 and makes an exec pool.
 `__UserLibCleanup` calls `PHYSFS_deinit()` if the program forgot, then
@@ -74,7 +82,7 @@ Nothing is ever reordered or removed.
 
 ## Still to do
 
-1. **PhysFSTest in a Cradle lab:** one copy, then two at once with different names (the per-program state), then 50 opens and closes (no memory left behind).
+1. **PhysFSTest in a Cradle lab:** done 9 November 2026 on the Team's OpenROM (see the pull request for 1.1): one copy, two at once, 20 opens and closes, and the expunge.
 2. **Hedgewars 1.0.3 built on the SDK**, then DXX-Rebirth and Block Attack moved off their own copies.
 3. **An OS4 and AROS form** (AROS has its own library tools).
 4. **Offer the AmigaOS platform file upstream** to PhysicsFS.

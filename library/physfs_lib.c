@@ -1,8 +1,8 @@
 /*
  * physfs.library: PhysicsFS 3.2.0 as one shared AmigaOS library.
  *
- * Built with -fbaserel and libnix's libinitr.o: every OpenLibrary() makes a
- * new library base holding its own copy of PhysicsFS's data, so each program
+ * Built with -fbaserel and started by physfs_libinit.c: every OpenLibrary()
+ * makes a new library base holding its own copy of PhysicsFS's data, so each program
  * has its own search path, write dir, open files and error state, as if it
  * had PhysicsFS linked in. Each call's stub (physfs_stubs.c, made by
  * tools/gen.py) points a4 at the caller's copy before calling PhysicsFS.
@@ -20,20 +20,11 @@
 #include <dos/dosextens.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
-#include <libinit.h>
+#include "physfs_libinit.h"
 #include <string.h>
 #include <stddef.h>
 
 #include "physfs.h"
-
-#define PHYSFS_LIB_VERSION  1
-#define PHYSFS_LIB_REVISION 0
-
-const UWORD LibVersion = PHYSFS_LIB_VERSION;
-const UWORD LibRevision = PHYSFS_LIB_REVISION;
-const char LibName[] = "physfs.library";
-const char LibIdString[] = "physfs.library 1.0 (8.11.2026) PhysicsFS 3.2.0";
-const char VersionTag[] = "$VER: physfs.library 1.0 (8.11.2026) PhysicsFS 3.2.0, AmiCradle Team";
 
 struct ExecBase *SysBase;
 struct DosLibrary *DOSBase;
@@ -118,11 +109,11 @@ void abort(void)
     exit(20);
 }
 
-/* libinitr calls these with a4 already on this opener's data: 0 is success. */
+/* physfs_libinit.c calls these with a4 on this opener's data: 0 is success. */
 LONG __stdargs __UserLibInit(struct Library *base, REG(a4, APTR a4))
 {
     (void) a4;
-    SysBase = (struct ExecBase *) ((struct libBase *) base)->SysBase;
+    SysBase = ((struct PhysFSLibBase *) base)->sys;
     if (SysBase->LibNode.lib_Version < 39)
         return 1;
     DOSBase = (struct DosLibrary *) OpenLibrary((CONST_STRPTR) "dos.library", 39);

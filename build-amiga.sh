@@ -9,7 +9,7 @@
 #          (found under ~/CradleLab/gfopensdk/OpenNDK when there)
 # Outputs:
 #   OUT/Libs/physfs.library     PhysicsFS 3.2.0, all ten archivers, one copy
-#                               of its state per program (libnix libinitr)
+#                               of its state per program (physfs_libinit.c)
 #   OUT/sdk/include/            physfs.h, proto/physfs.h, inline/physfs.h:
 #                               PhysicsFS's header with the calls through
 #                               PhysFSBase
@@ -56,16 +56,18 @@ cp -R "$W/gen/fd" "$OUT/sdk/fd"
 
 COMMON="-noixemul $CPU $NDKFLAG -O2 -fomit-frame-pointer -fno-tree-loop-distribute-patterns -fno-common -std=gnu99 -DNDEBUG -D__amigaos__ -Wall -Wno-unused"
 
-# physfs.library: every object a4-relative, so libinitr can give each
-# opener its own copy of the data.
-LIBINIT=$("$CC" -noixemul -fbaserel -print-file-name=libinitr.o)
-if [ ! -f "$LIBINIT" ]; then LIBINIT=$(find "$STOVE" -name libinitr.o -path '*libnix*' | head -1); fi
-[ -f "$LIBINIT" ] || { echo "no libnix libinitr.o in $STOVE"; exit 2; }
+# physfs.library: PhysicsFS and the call entries a4-relative, so that
+# physfs_libinit.c (the RomTag and the library's own Open/Close/Expunge,
+# built absolute and linked first) can give each opener its own copy of the
+# data. -resident has ld add the table of the data's pointers into itself
+# (__datadata_relocs), which each copy is relocated by.
 for f in $SRC "$HERE/library/physfs_lib.c" "$W/gen/physfs_stubs.c"; do
-    "$CC" $COMMON -fbaserel -I"$W/src" -c -o "$W/lib/$(basename "$f" .c).o" "$f"
+    "$CC" $COMMON -fbaserel -I"$W/src" -I"$HERE/library" -c -o "$W/lib/$(basename "$f" .c).o" "$f"
 done
+"$CC" $COMMON -fno-toplevel-reorder -I"$W/gen" -I"$HERE/library" -c -o "$W/physfs_libinit.o" "$HERE/library/physfs_libinit.c"
 # strip refuses the a4-relative data section, so the link strips (-s).
-"$CC" -noixemul $CPU -fbaserel -nostartfiles -s -o "$OUT/Libs/physfs.library" "$LIBINIT" "$W"/lib/*.o -lgcc
+"$CC" -noixemul $CPU -resident -nostartfiles -s -o "$OUT/Libs/physfs.library" "$W/physfs_libinit.o" "$W"/lib/*.o -lgcc
+python3 -I "$HERE/tools/checklib.py" "$OUT/Libs/physfs.library"
 
 # libphysfs.a: the same PhysicsFS, linked into a program instead.
 for f in $SRC; do

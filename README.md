@@ -12,7 +12,7 @@ DXX-Rebirth, Blobby Volley, Block Attack, C-Dogs SDL, Neverball, Open Surge
 Until now each port carried its own copy, built into the program. This
 repository makes one copy, `LIBS:physfs.library`:
 
-- **Each program has its own PhysicsFS.** Every program that opens the library gets its own copy of PhysicsFS's state: search path, write drawer, open files, errors. It behaves as if PhysicsFS were linked in (libnix's `libinitr`, one data segment per opener).
+- **Each program has its own PhysicsFS.** Every program that opens the library gets its own copy of PhysicsFS's state: search path, write drawer, open files, errors. It behaves as if PhysicsFS were linked in (`library/physfs_libinit.c`: one data segment per opener).
 - **Ports build unchanged.** Build against the SDK's `physfs.h` and link with `-lphysfs_auto`. The calls go through `PhysFSBase`; nothing else in the port changes.
 - **Smaller programs.** The test program is 19 KB through the library and 142 KB with PhysicsFS linked in.
 - **Safe with more than one task.** Mutexes are exec semaphores, so a program's sound task may stream from a PhysicsFS file beside its main task. Memory comes from a pool per program, so whatever a program leaves open is freed when it closes the library.

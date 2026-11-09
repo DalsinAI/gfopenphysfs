@@ -53,6 +53,9 @@ cp "$W/src/physfs.h" "$OUT/sdk/include-static/physfs.h"
 SRC=$(ls "$W"/src/*.c)
 
 python3 -I "$HERE/tools/gen.py" "$W/gen"
+for f in include/inline/physfs.h include/proto/physfs.h include/physfs.h fd/physfs_lib.fd; do
+    cmp -s "$W/gen/$f" "$HERE/sdk/$f" || { echo "sdk/$f is not what gen.py makes: run tools/update-sdk.sh"; exit 1; }
+done
 cp -R "$W/gen/include" "$OUT/sdk/include"
 cp -R "$W/gen/fd" "$OUT/sdk/fd"
 

@@ -18,14 +18,14 @@ repository makes one copy, `LIBS:physfs.library`:
 - **Safe with more than one task.** Mutexes are exec semaphores, so a program's sound task may stream from a PhysicsFS file beside its main task. Memory comes from a pool per program, so whatever a program leaves open is freed when it closes the library.
 - **All ten archivers**, on dos.library: zip, 7z, GRP, HOG, MVL, WAD, QPAK, SLB, ISO9660 and VDF.
 
-## Status (8 November 2026)
+## Status (9 November 2026)
 
 | | |
 |---|---|
 | PhysicsFS | 3.2.0 as released (`physfs/`), with the Team's AmigaOS platform (`amiga/`) and a small header patch (`patches/`) |
-| physfs.library | 1.0: builds with OpenAmigaGCC 16.2.0-open4; not yet run on an Amiga |
+| physfs.library | 1.1: builds with OpenAmigaGCC 16.2.0; runs in a Cradle lab on the Team's OpenROM (exec 47.13): PhysFSTest 38 of 38, alone and four at once; 20 opens and closes leave no memory behind; `Avail FLUSH` expunges it |
 | Host check | `tests/host/run.sh`: PhysFSTest against PhysicsFS on Linux, 38 of 38 |
-| Next | PhysFSTest in a Cradle lab (one copy, then two at once), then Hedgewars 1.0.3 on it |
+| Next | Shipped in GFOpenUp and the GFOpenGPU SDK, then Hedgewars 1.0.3 on it |
 
 ## Using it in a port
 
@@ -48,7 +48,8 @@ A program built `-fbaserel` must mark its callbacks `__saveds`.
     STOVE=~/AmiCradle/stoves/os32-gcc16 ./build-amiga.sh    # or Cradle's stove_build, target .
     sh tests/host/run.sh                                     # the host check
 
-`build-amiga.sh` lists what it makes. `NDK=` names the OS headers when a
+`build-amiga.sh` lists what it makes, and checks the library with
+`tools/checklib.py` (RomTag, vectors, data relocation table). `NDK=` names the OS headers when a
 stove has none of its own.
 
 ## How the library is made

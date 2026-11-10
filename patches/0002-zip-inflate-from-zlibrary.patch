@@ -12,7 +12,7 @@
  
  /*
   * A buffer of ZIP_READBUFSIZE is allocated for each compressed file opened,
-@@ -403,6 +407,15 @@
+@@ -403,6 +407,20 @@
           */
          if (offset < finfo->uncompressed_position)
          {
@@ -24,11 +24,16 @@
 +
 +            if (zlib_err(inflateReset(&finfo->stream)) != Z_OK)
 +                return 0;
++
++            /* inflateReset leaves next_in and avail_in alone: drop what
++             *  was read ahead, or it is inflated again as the start. */
++            finfo->stream.next_in = finfo->buffer;
++            finfo->stream.avail_in = 0;
 +#else
              /* we do a copy so state is sane if inflateInit2() fails. */
              z_stream str;
              initializeZStream(&str);
-@@ -414,6 +427,7 @@
+@@ -414,6 +432,7 @@
  
              inflateEnd(&finfo->stream);
              memcpy(&finfo->stream, &str, sizeof (z_stream));

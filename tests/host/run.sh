@@ -20,6 +20,18 @@ patch -s -d "$B/z/src" -p1 < "$HERE/patches/0002-zip-inflate-from-zlibrary.patch
 "$CC" -std=gnu99 -O1 -g -Wall -Wno-unused -DPHYSFS_ZLIBRARY_HOSTED -I"$B/z/src" -I"$HERE/tests" \
     -o "$B/PhysFSTestZlib" $(ls "$B"/z/src/*.c) "$HERE/tests/physfs_test.c" -lz -lpthread
 "$B/PhysFSTestZlib" "$B/z/w" host
+# PhysFSBench over a big zip and a PAK with both builds: every byte read,
+# seeks back in deflated members included, must be the same.
+python3 -I "$HERE/tools/make_bench_data.py" "$B/data" --files 600 >/dev/null
+"$CC" -std=gnu99 -O1 -g -Wall -Wno-unused -I"$HERE/physfs" -o "$B/PhysFSBench" $SRC "$HERE/tests/physfs_bench.c" -lpthread
+"$CC" -std=gnu99 -O1 -g -Wall -Wno-unused -DPHYSFS_ZLIBRARY_HOSTED -I"$B/z/src" \
+    -o "$B/PhysFSBenchZlib" $(ls "$B"/z/src/*.c) "$HERE/tests/physfs_bench.c" -lz -lpthread
+"$B/PhysFSBench" "$B/data/bench.zip" "$B/data/bench.pak" > "$B/bench-miniz.txt" || true
+"$B/PhysFSBenchZlib" "$B/data/bench.zip" "$B/data/bench.pak" > "$B/bench-zlib.txt" || true
+grep -q 'ok$' "$B/bench-miniz.txt" && grep -q 'ok$' "$B/bench-zlib.txt" \
+    || { echo "PhysFSBench failed"; cat "$B/bench-miniz.txt" "$B/bench-zlib.txt"; exit 1; }
+[ "$(grep -o 'sum [0-9a-f]*' "$B/bench-miniz.txt")" = "$(grep -o 'sum [0-9a-f]*' "$B/bench-zlib.txt")" ] \
+    || { echo "PhysFSBench: the zlib build read other bytes"; cat "$B/bench-miniz.txt" "$B/bench-zlib.txt"; exit 1; }
 python3 -I "$HERE/tools/gen.py" "$B/gen" >/dev/null
 for f in physfs_stubs.c physfs_vectors.h include/inline/physfs.h include/proto/physfs.h include/physfs.h fd/physfs_lib.fd; do
     test -s "$B/gen/$f" || { echo "gen.py: $f missing"; exit 1; }
@@ -34,4 +46,4 @@ v=$(grep -c '^PHYSFS_VECTOR(' "$B/gen/physfs_vectors.h")
 for f in include/inline/physfs.h include/proto/physfs.h include/physfs.h fd/physfs_lib.fd; do
     cmp -s "$B/gen/$f" "$HERE/sdk/$f" || { echo "sdk/$f is not what gen.py makes: run tools/update-sdk.sh"; exit 1; }
 done
-echo "host: PASS (PhysFSTest with miniz and with zlib, gen.py made $n calls, sdk/ matches it)"
+echo "host: PASS (PhysFSTest and PhysFSBench with miniz and with zlib, gen.py made $n calls, sdk/ matches it)"

@@ -15,8 +15,9 @@
  *             deflated zip members); a checksum of every byte read
  *   seek      open, seek to 3 places, read 64 bytes at each, close
  *   unmount   PHYSFS_unmount
- * One line per phase: the time in ms, the count, and for read the bytes and
- * the checksum, so two builds can be compared byte for byte.
+ * One line per phase: the time in ms, the count, and for read and seek a
+ * sum of the bytes read, so two builds can be compared byte for byte. The
+ * sum's own time is left out of the phase's.
  *
  * zlib licence, like PhysicsFS. Copyright (c) 2026 AmiCradle Team.
  */
@@ -64,13 +65,16 @@ static char *paths[MAXFILES];
 static int nfiles, ndirs;
 static char piece[4096];
 static PHYSFS_uint32 crc;            /* not a CRC: a cheap order-dependent sum */
+static unsigned long long insum;     /* the sum's own time, left out of each phase's */
 
 static void sum(const unsigned char *p, PHYSFS_sint64 n)
 {
+    unsigned long long t = now_us();
     PHYSFS_uint32 s = crc;
     while (n-- > 0)
         s = (s << 5) + (s >> 27) + *p++;
     crc = s;
+    insum += now_us() - t;
 }
 
 static PHYSFS_EnumerateCallbackResult walk(void *data, const char *dir, const char *name)
@@ -97,7 +101,8 @@ static PHYSFS_EnumerateCallbackResult walk(void *data, const char *dir, const ch
 static unsigned long long t0;
 static void phase(const char *archive, const char *what, unsigned long count, const char *more)
 {
-    unsigned long long t = now_us();
+    unsigned long long t = now_us() - insum;
+    insum = 0;
     printf("%-10s %-24s %8lu.%03lu ms %7lu%s\n", what, archive, (unsigned long) ((t - t0) / 1000),
            (unsigned long) ((t - t0) % 1000), count, more ? more : "");
     t0 = now_us();

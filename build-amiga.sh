@@ -19,6 +19,8 @@
 #   OUT/sdk/fd/physfs_lib.fd
 #   OUT/tests/PhysFSTest        the checks through physfs.library
 #   OUT/tests/PhysFSTestStatic  the same checks with libphysfs.a
+#   OUT/tests/PhysFSBench       time by phase over big archives
+#   OUT/physfs.library.map      the link map, to name hot code in a profile
 # zlib licence, Copyright (c) 2026 AmiCradle Team.
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -75,7 +77,7 @@ for f in $SRC "$HERE/library/physfs_lib.c" "$W/gen/physfs_stubs.c"; do
 done
 "$CC" $COMMON -fno-toplevel-reorder -I"$W/gen" -I"$HERE/library" -c -o "$W/physfs_libinit.o" "$HERE/library/physfs_libinit.c"
 # strip refuses the a4-relative data section, so the link strips (-s).
-"$CC" -noixemul $CPU -resident -nostartfiles -s -o "$OUT/Libs/physfs.library" "$W/physfs_libinit.o" "$W"/lib/*.o -lgcc
+"$CC" -noixemul $CPU -resident -nostartfiles -s -Wl,-Map,"$OUT/physfs.library.map" -o "$OUT/Libs/physfs.library" "$W/physfs_libinit.o" "$W"/lib/*.o -lgcc
 python3 -I "$HERE/tools/checklib.py" "$OUT/Libs/physfs.library"
 
 # libphysfs.a: the same PhysicsFS, linked into a program instead.
@@ -93,8 +95,11 @@ done
     "$HERE/tests/physfs_test.c" -L"$OUT/sdk/lib" -lphysfs_auto
 "$CC" -noixemul $CPU $NDKFLAG -O2 -Wall -I"$OUT/sdk/include-static" -I"$HERE/tests" -o "$OUT/tests/PhysFSTestStatic" \
     "$HERE/tests/physfs_test.c" "$OUT/sdk/lib/libphysfs.a"
+# PhysFSBench: time by phase over big archives (tools/make_bench_data.py makes them).
+"$CC" -noixemul $CPU $NDKFLAG -O2 -Wall -I"$OUT/sdk/include" -o "$OUT/tests/PhysFSBench" \
+    "$HERE/tests/physfs_bench.c" -L"$OUT/sdk/lib" -lphysfs_auto
 
-for f in "$OUT/Libs/physfs.library" "$OUT/tests/PhysFSTest" "$OUT/tests/PhysFSTestStatic" \
+for f in "$OUT/Libs/physfs.library" "$OUT/tests/PhysFSTest" "$OUT/tests/PhysFSTestStatic" "$OUT/tests/PhysFSBench" \
          "$OUT/sdk/lib/libphysfs.a" "$OUT/sdk/lib/libphysfs_auto.a"; do
     echo "$(basename "$f") $(wc -c < "$f") bytes $(sha256sum "$f" | cut -c1-16)"
 done

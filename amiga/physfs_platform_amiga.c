@@ -229,11 +229,19 @@ int __PHYSFS_platformMkDir(const char *path)
  * 3,000 files was 51,050 Reads, and stat'ing them 30,020 more.
  * The buffer holds the bytes of the file from bufpos to bufpos + buflen, and
  * the next byte to give is buf[bufat]; the handle's own position is then
- * bufpos + buflen. A read as large as the buffer, with the buffer used up,
- * goes straight to Read() into the caller's memory. Files opened for writing
- * or appending have no buffer and behave as before.
+ * bufpos + buflen. Files opened for writing or appending have no buffer and
+ * behave as before.
+ * How much it reads ahead follows the reads: after an open or a seek it
+ * fills only AMIGA_READFIRST bytes, and each fill in a row after that twice
+ * as many, up to AMIGA_READBUF. A read at least as large as the next fill,
+ * with the buffer used up, goes straight to Read() into the caller's memory.
+ * So a directory read a field at a time soon comes 4 KB at a time, while a
+ * seek and a small read (a local header, a PAK member's 64 bytes) costs one
+ * small Read, as before (the Pi 5, 10 Nov: a fixed 4 KB fill after every
+ * seek made PhysFSBench's PAK seeks 2.9 times slower).
  */
 #define AMIGA_READBUF 4096
+#define AMIGA_READFIRST 256
 
 typedef struct
 {
@@ -242,6 +250,7 @@ typedef struct
     LONG bufpos;       /* the file offset of buf[0] */
     LONG buflen;       /* bytes in buf */
     LONG bufat;        /* the next byte to give, 0 to buflen */
+    LONG fill;         /* bytes the next fill reads, AMIGA_READFIRST to AMIGA_READBUF */
 } AmigaFile;
 
 static void *doOpen(const char *filename, LONG mode, int appending)
@@ -272,6 +281,7 @@ static void *doOpen(const char *filename, LONG mode, int appending)
     retval->bufpos = 0;
     retval->buflen = 0;
     retval->bufat = 0;
+    retval->fill = AMIGA_READFIRST;
     return retval;
 } /* doOpen */
 
@@ -329,7 +339,7 @@ PHYSFS_sint64 __PHYSFS_platformRead(void *opaque, void *buffer,
         /* the buffer is used up: the handle is at bufpos + buflen */
         f->bufpos += f->buflen;
         f->buflen = f->bufat = 0;
-        if (want >= AMIGA_READBUF)
+        if (want >= f->fill)
         {
             rc = Read(f->fh, out, want);
             if (rc == -1)
@@ -339,10 +349,12 @@ PHYSFS_sint64 __PHYSFS_platformRead(void *opaque, void *buffer,
             break;   /* all of it, or the end of the file */
         } /* if */
 
-        rc = Read(f->fh, f->buf, AMIGA_READBUF);
+        rc = Read(f->fh, f->buf, f->fill);
         if (rc <= 0)
             break;
         f->buflen = rc;
+        if (f->fill < AMIGA_READBUF)
+            f->fill *= 2;
     } /* while */
 
     BAIL_IF(got == 0 && rc == -1, errcodeFromDos(), -1);
@@ -378,6 +390,7 @@ int __PHYSFS_platformSeek(void *opaque, PHYSFS_uint64 pos)
         BAIL_IF(Seek(f->fh, (LONG) pos, OFFSET_BEGINNING) == -1, errcodeFromDos(), 0);
         f->bufpos = (LONG) pos;
         f->buflen = f->bufat = 0;
+        f->fill = AMIGA_READFIRST;
         return 1;
     } /* if */
     BAIL_IF(Seek(f->fh, (LONG) pos, OFFSET_BEGINNING) == -1, errcodeFromDos(), 0);

@@ -220,10 +220,43 @@ int __PHYSFS_platformMkDir(const char *path)
 } /* __PHYSFS_platformMkDir */
 
 
+/*
+ * A file PhysicsFS opened. A file opened for reading reads through a buffer
+ * of its own: dos.library's Read() is a packet to the filesystem for every
+ * call, and PhysicsFS's archivers read their directories a field at a time
+ * (a zip's central directory is 17 reads of 2 or 4 bytes an entry, its local
+ * headers 10 more). Measured on PhysFSBench (task 42): mounting a zip of
+ * 3,000 files was 51,050 Reads, and stat'ing them 30,020 more.
+ * The buffer holds the bytes of the file from bufpos to bufpos + buflen, and
+ * the next byte to give is buf[bufat]; the handle's own position is then
+ * bufpos + buflen. Files opened for writing or appending have no buffer and
+ * behave as before.
+ * How much it reads ahead follows the reads: after an open or a seek it
+ * fills only AMIGA_READFIRST bytes, and each fill in a row after that twice
+ * as many, up to AMIGA_READBUF. A read at least as large as the next fill,
+ * with the buffer used up, goes straight to Read() into the caller's memory.
+ * So a directory read a field at a time soon comes 4 KB at a time, while a
+ * seek and a small read (a local header, a PAK member's 64 bytes) costs one
+ * small Read, as before (the Pi 5, 10 Nov: a fixed 4 KB fill after every
+ * seek made PhysFSBench's PAK seeks 2.9 times slower).
+ */
+#define AMIGA_READBUF 4096
+#define AMIGA_READFIRST 256
+
+typedef struct
+{
+    BPTR fh;
+    UBYTE *buf;        /* NULL: not buffered (written files) */
+    LONG bufpos;       /* the file offset of buf[0] */
+    LONG buflen;       /* bytes in buf */
+    LONG bufat;        /* the next byte to give, 0 to buflen */
+    LONG fill;         /* bytes the next fill reads, AMIGA_READFIRST to AMIGA_READBUF */
+} AmigaFile;
+
 static void *doOpen(const char *filename, LONG mode, int appending)
 {
     BPTR fh;
-    BPTR *retval;
+    AmigaFile *retval;
     AMIGA_PATH(name, filename, NULL);
 
     fh = Open((CONST_STRPTR) name, mode);
@@ -236,14 +269,19 @@ static void *doOpen(const char *filename, LONG mode, int appending)
         BAIL(err, NULL);
     } /* if */
 
-    retval = (BPTR *) allocator.Malloc(sizeof (BPTR));
+    retval = (AmigaFile *) allocator.Malloc(sizeof (AmigaFile) + (mode == MODE_OLDFILE ? AMIGA_READBUF : 0));
     if (!retval)
     {
         Close(fh);
         BAIL(PHYSFS_ERR_OUT_OF_MEMORY, NULL);
     } /* if */
 
-    *retval = fh;
+    retval->fh = fh;
+    retval->buf = (mode == MODE_OLDFILE) ? (UBYTE *) (retval + 1) : NULL;
+    retval->bufpos = 0;
+    retval->buflen = 0;
+    retval->bufat = 0;
+    retval->fill = AMIGA_READFIRST;
     return retval;
 } /* doOpen */
 
@@ -270,20 +308,64 @@ void *__PHYSFS_platformOpenAppend(const char *filename)
 PHYSFS_sint64 __PHYSFS_platformRead(void *opaque, void *buffer,
                                     PHYSFS_uint64 len)
 {
-    const BPTR fh = *((BPTR *) opaque);
-    LONG rc;
+    AmigaFile *f = (AmigaFile *) opaque;
+    UBYTE *out = (UBYTE *) buffer;
+    LONG want, got = 0, rc = 0;
 
     BAIL_IF(len > 0x7FFFFFFF, PHYSFS_ERR_INVALID_ARGUMENT, -1);
-    rc = Read(fh, buffer, (LONG) len);
-    BAIL_IF(rc == -1, errcodeFromDos(), -1);
-    return (PHYSFS_sint64) rc;
+    want = (LONG) len;
+    if (!f->buf)
+    {
+        rc = Read(f->fh, buffer, want);
+        BAIL_IF(rc == -1, errcodeFromDos(), -1);
+        return (PHYSFS_sint64) rc;
+    } /* if */
+
+    while (want > 0)
+    {
+        LONG have = f->buflen - f->bufat;
+        if (have > 0)
+        {
+            if (have > want)
+                have = want;
+            memcpy(out, f->buf + f->bufat, (size_t) have);
+            f->bufat += have;
+            out += have;
+            got += have;
+            want -= have;
+            continue;
+        } /* if */
+
+        /* the buffer is used up: the handle is at bufpos + buflen */
+        f->bufpos += f->buflen;
+        f->buflen = f->bufat = 0;
+        if (want >= f->fill)
+        {
+            rc = Read(f->fh, out, want);
+            if (rc == -1)
+                break;
+            f->bufpos += rc;
+            got += rc;
+            break;   /* all of it, or the end of the file */
+        } /* if */
+
+        rc = Read(f->fh, f->buf, f->fill);
+        if (rc <= 0)
+            break;
+        f->buflen = rc;
+        if (f->fill < AMIGA_READBUF)
+            f->fill *= 2;
+    } /* while */
+
+    BAIL_IF(got == 0 && rc == -1, errcodeFromDos(), -1);
+    return (PHYSFS_sint64) got;
 } /* __PHYSFS_platformRead */
 
 
 PHYSFS_sint64 __PHYSFS_platformWrite(void *opaque, const void *buffer,
                                      PHYSFS_uint64 len)
 {
-    const BPTR fh = *((BPTR *) opaque);
+    const BPTR fh = ((AmigaFile *) opaque)->fh;
     LONG rc;
 
     BAIL_IF(len > 0x7FFFFFFF, PHYSFS_ERR_INVALID_ARGUMENT, -1);
@@ -295,17 +377,34 @@ PHYSFS_sint64 __PHYSFS_platformWrite(void *opaque, const void *buffer,
 
 int __PHYSFS_platformSeek(void *opaque, PHYSFS_uint64 pos)
 {
-    const BPTR fh = *((BPTR *) opaque);
+    AmigaFile *f = (AmigaFile *) opaque;
     BAIL_IF(pos > 0x7FFFFFFF, PHYSFS_ERR_INVALID_ARGUMENT, 0);
-    BAIL_IF(Seek(fh, (LONG) pos, OFFSET_BEGINNING) == -1, errcodeFromDos(), 0);
+    if (f->buf)
+    {
+        /* inside what the buffer holds: no packet */
+        if ((LONG) pos >= f->bufpos && (LONG) pos <= f->bufpos + f->buflen)
+        {
+            f->bufat = (LONG) pos - f->bufpos;
+            return 1;
+        } /* if */
+        BAIL_IF(Seek(f->fh, (LONG) pos, OFFSET_BEGINNING) == -1, errcodeFromDos(), 0);
+        f->bufpos = (LONG) pos;
+        f->buflen = f->bufat = 0;
+        f->fill = AMIGA_READFIRST;
+        return 1;
+    } /* if */
+    BAIL_IF(Seek(f->fh, (LONG) pos, OFFSET_BEGINNING) == -1, errcodeFromDos(), 0);
     return 1;
 } /* __PHYSFS_platformSeek */
 
 
 PHYSFS_sint64 __PHYSFS_platformTell(void *opaque)
 {
-    const BPTR fh = *((BPTR *) opaque);
-    const LONG pos = Seek(fh, 0, OFFSET_CURRENT);
+    AmigaFile *f = (AmigaFile *) opaque;
+    LONG pos;
+    if (f->buf)
+        return (PHYSFS_sint64) (f->bufpos + f->bufat);
+    pos = Seek(f->fh, 0, OFFSET_CURRENT);
     BAIL_IF(pos == -1, errcodeFromDos(), -1);
     return (PHYSFS_sint64) pos;
 } /* __PHYSFS_platformTell */
@@ -313,7 +412,7 @@ PHYSFS_sint64 __PHYSFS_platformTell(void *opaque)
 
 PHYSFS_sint64 __PHYSFS_platformFileLength(void *opaque)
 {
-    const BPTR fh = *((BPTR *) opaque);
+    const BPTR fh = ((AmigaFile *) opaque)->fh;
     PHYSFS_sint64 retval = -1;
     struct FileInfoBlock *fib;
 
@@ -330,7 +429,7 @@ PHYSFS_sint64 __PHYSFS_platformFileLength(void *opaque)
 
 int __PHYSFS_platformFlush(void *opaque)
 {
-    const BPTR fh = *((BPTR *) opaque);
+    const BPTR fh = ((AmigaFile *) opaque)->fh;
     BAIL_IF(!Flush(fh), errcodeFromDos(), 0);
     return 1;
 } /* __PHYSFS_platformFlush */
@@ -338,8 +437,7 @@ int __PHYSFS_platformFlush(void *opaque)
 
 void __PHYSFS_platformClose(void *opaque)
 {
-    const BPTR fh = *((BPTR *) opaque);
-    Close(fh);
+    Close(((AmigaFile *) opaque)->fh);
     allocator.Free(opaque);
 } /* __PHYSFS_platformClose */
 
